@@ -1,10 +1,11 @@
 import argparse
 import requests
 import json
+from itertools import islice
 
 class Client:
     def __init__(self):
-        self.sessionData = {"url": "", "logged_in": False}
+        self.sessionData = {"login_url": "", "logged_in": False, "agencies": []}
         self.session = requests.Session()
         self.main()
         
@@ -63,10 +64,7 @@ class Client:
 
     def login(self, args):
         if args.url[-1] == "/": #check if the path is fully qualified on the url
-            self.sessionData["url"] = args.url
-        else:
-            self.sessionData["url"] = args.url + "/"
-            print(self.sessionData["url"])
+            self.sessionData["login_url"] = args.url
 
         # Implement login logic here
         username = input("What is your username?: ")
@@ -79,18 +77,22 @@ class Client:
 
         # Make the POST request
         print("Logging in")
-        response = self.session.post(self.sessionData["url"] + 'api/login/', data=json_payload, headers=headers)
-
-        if int(response.status_code) == 200:
-            self.sessionData["logged_in"] = True
         
-        print(response.text)
+        try:
+            response = self.session.post(self.sessionData["login_url"] + 'api/login', data=json_payload, headers=headers)
+            if int(response.status_code) == 200:
+                self.sessionData["logged_in"] = True
+            print(response.text)
+        except Exception as e:
+            print("Log in attempt failed. Reason: ", e)
+
+        
         
 
     def logout(self, args):
         # Implement logout logic here
         if self.sessionData["logged_in"]:
-            response = self.session.post(self.sessionData["url"] + 'api/logout/')
+            response = self.session.post(self.sessionData["login_url"] + 'api/logout')
             if int(response.status_code) == 200:
                 self.sessionData["logged_in"] == False
             print(response.text)
@@ -109,7 +111,7 @@ class Client:
             details = input("What are the details of the story?: ")
             region = input("Which region is the story for?: ")
             story_payload = {"headline": headline, "category": category, "details":details, "region":region}
-            response = self.session.post(self.sessionData["url"] + 'api/stories/' , json=story_payload, headers=headers_story)
+            response = self.session.post(self.sessionData["url"] + 'api/stories' , json=story_payload, headers=headers_story)
             if (response.status_code == 201):
                 print("Story successfully created")
             else:
@@ -120,30 +122,34 @@ class Client:
 
 
     def news(self, args):
-        if self.sessionData["logged_in"]:
-            headers = {"Content-Type": "application/x-www-form-urlencoded"}
-            story_json = {"story_cat": "*","story_region":"*" ,"story_date":"*" }
-            
-            if args.id: #implement later
-                pass
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        story_json = {"story_cat": "*","story_region":"*" ,"story_date":"*" }
+        if args.id: #implement later
+                    pass
+        if args.cat:
+            story_json["story_cat"] = args.cat
 
-            if args.cat:
-                story_json["story_cat"] = args.cat
+        if args.reg:
+            story_json["story_region"] = args.reg
 
-            if args.reg:
-                story_json["story_region"] = args.reg
+        if args.date:
+            story_json["story_date"] = args.date
 
-            if args.date:
-                story_json["story_date"] = args.date
+        if not(self.sessionData["agencies"]):
+            self.list_services(True)
 
+        query_string = '&'.join([f'{key}={value}' for key, value in story_json.items()])
 
-            response = self.session.get(self.sessionData["url"] + 'api/stories/' , json=story_json, headers=headers)
-            if response.status_code == 200:
-                self.display_news(response.text)
-            else:
-                print(response.content.decode("utf-8"))
-        else:
-            print("You are not logged in.")
+        for agency in self.sessionData["agencies"]:
+            try:
+                response = self.session.get(agency["url"] + '/api/stories?' + query_string, headers=headers)
+                if response.status_code == 200:
+                    self.display_news(response.text)
+                else:
+                    print("Query failed for ", agency["url"], " with code ", response.status_code)
+            except Exception as e:
+                print("Failed to get ", agency["url"])
+
 
     def display_news(self, text):
         stories = json.loads(text)
@@ -151,15 +157,16 @@ class Client:
             print(str(story["key"]) + ": " + story["headline"])
 
     def delete(self, args):
-        response = self.session.delete(self.sessionData["url"] + 'api/stories/' + args.story_key)
+        response = self.session.delete(self.sessionData["url"] + 'api/stories' + args.story_key)
         if response.status_code == 200:
             print("Story deleted successfully")
         else:
             print("error: ", response.content.decode('utf-8'))
 
     def list_services(self, args):
-        # Implement list services logic here
-        print("List command", args)
+        response = self.session.get("http://newssites.pythonanywhere.com/api/directory")
+        self.sessionData["agencies"] = json.loads(response.text)
+        print(self.sessionData["agencies"])
 
 
 
