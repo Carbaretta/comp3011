@@ -6,7 +6,7 @@ from django.contrib.auth import logout
 from django.contrib.sessions.models import Session
 from django.core.serializers import serialize
 
-from urllib.parse import parse_qs
+from urllib.parse import urlparse, parse_qs
 
 from .models import Story, Author
 import json
@@ -48,19 +48,26 @@ def userLogin(request):
     if request.method == "POST": #data should be received as POST payload
         username = request.POST.get('username')
         password = request.POST.get('password')
-        print(username, password)
-        author_user = Author.objects.get(username=username)
-        if author_user != None:
-            print("User found:", author_user.password)
-            if author_user.password == password:
-                request.session['username'] = username
-                request.session['name'] = author_user.name
-                request.session.save()
-                return HttpResponse(status=200, content=f"Successfully logged in. Welcome.", content_type='text/plain')
+        
+        if username != None and password != None:
+            try:
+                author_user = Author.objects.get(username=username)
+            except Exception as e:
+                return HttpResponse(status=401, content=f"Username or password invalid", content_type='text/plain')
+
+            if author_user != None:
+                print("User found:", author_user.password)
+                if author_user.password == password:
+                    request.session['username'] = username
+                    request.session['name'] = author_user.name
+                    request.session.save()
+                    return HttpResponse(status=200, content=f"Successfully logged in. Welcome.", content_type='text/plain')
+                else:
+                    return HttpResponse(status=401, content=f"Username or password invalid", content_type='text/plain')
             else:
                 return HttpResponse(status=401, content=f"Username or password invalid", content_type='text/plain')
         else:
-            return HttpResponse(status=401, content=f"Username or password invalid", content_type='text/plain')
+            return HttpResponse(status=401, content=f"Username or password not provided", content_type='text/plain')
     else:
         return HttpResponse(status=400, content=f"Request must be POST", content_type='text/plain')
 
@@ -87,57 +94,54 @@ def manageStories(request): #handles all requests to /api/stories/
     
 @csrf_exempt
 def getStories(request):    #fetch all stories, filtered against user specified filters
-    decode_data = request.body.decode('utf-8')
-    if len(decode_data) > 0:
-        json_payload = json.loads(decode_data) #loads the json payload
-        
-        filter_conditions = {}  #build a filter list
-        if json_payload["story_cat"] != "*":
-            filter_conditions["category"] = json_payload["story_cat"]
-        if json_payload["story_region"] != "*":
-            filter_conditions["region"] = json_payload["story_region"]
-        if json_payload["story_date"] != "*":
-            date_filter = datetime.datetime.strptime(json_payload["story_date"], "%d/%m/%y") ##extract text format into actual datetime object 
-            filter_conditions["date__gte"] = date_filter.strftime("%Y-%m-%d 00:00:00.000000") ##create filter. __gte append makes the filter such we filter dates "greater than or equal"
+    query_params = parse_qs(request.META["QUERY_STRING"])
+    print("Query params:", query_params)
+    filter_conditions = {}  #build a filter list
+    if query_params["story_cat"][0] != "*":
+        filter_conditions["category"] = query_params["story_cat"][0]
+    if query_params["story_region"][0] != "*":
+        filter_conditions["region"] = query_params["story_region"][0]
+    if query_params["story_date"][0] != "*":
+        date_filter = datetime.datetime.strptime(query_params["story_date"], "%d/%m/%y") ##extract text format into actual datetime object 
+        filter_conditions["date__gte"] = date_filter.strftime("%Y-%m-%d 00:00:00.000000") ##create filter. __gte append makes the filter such we filter dates "greater than or equal"
 
-        # print(request.GET.urlencode())
-        # decoded_data = parse_qs(request.GET.urlencode())
+    # print(request.GET.urlencode())
+    # decoded_data = parse_qs(request.GET.urlencode())
 
-        # if decoded_data.get("story_cat", [])[0] != "*":
-        #     filter_conditions["category"] = decoded_data.get("story_cat", [])[0]
-        # if decoded_data.get("story_region", [])[0] != "*":
-        #     filter_conditions["region"] = decoded_data.get("story_cat", [])[0]
-        # if decoded_data.get("story_data", [])[0] != "*":
-        #     date_filter = datetime.datetime.strptime(decoded_data.get("story_cat", [])[0], "%d/%m/%y") ##extract text format into actual datetime object 
-        #     filter_conditions["date__gte"] = date_filter.strftime("%Y-%m-%d 00:00:00.000000") ##create filter. __gte append makes the filter such we filter dates "greater than or equal"
+    # if decoded_data.get("story_cat", [])[0] != "*":
+    #     filter_conditions["category"] = decoded_data.get("story_cat", [])[0]
+    # if decoded_data.get("story_region", [])[0] != "*":
+    #     filter_conditions["region"] = decoded_data.get("story_cat", [])[0]
+    # if decoded_data.get("story_data", [])[0] != "*":
+    #     date_filter = datetime.datetime.strptime(decoded_data.get("story_cat", [])[0], "%d/%m/%y") ##extract text format into actual datetime object 
+    #     filter_conditions["date__gte"] = date_filter.strftime("%Y-%m-%d 00:00:00.000000") ##create filter. __gte append makes the filter such we filter dates "greater than or equal"
 
+    print("Conditions:", filter_conditions)
+    filtered_stories = Story.objects.filter(**filter_conditions)    #enter filter conditions with kwargs
+    if len(filtered_stories) == 0:
+        return HttpResponse(status=404, content=f"No stories found for search criteria.", content_type='text/plain')
+    
+    serialised_filtered_stories = json.loads(serialize('json', filtered_stories)) #serialise function converts from object to string representation.
+                                                                                #json.loads then converts from string to indexable dictionary
+    
+    story_array = []
+    
+    for story in serialised_filtered_stories: #grab the details from the serialised QuerySet and convert to correct data structure
+        individual_story = {}
+        print("Story is:", story)
+        individual_story["key"] = story["pk"]
+        individual_story["headline"] = story["fields"]["headline"]
+        individual_story["story_cat"] = story["fields"]["category"]
+        individual_story["story_region"] = story["fields"]["region"]
+        individual_story["author"] = story["fields"]["author"]
+        individual_story["story_date"] = story["fields"]["date"]
+        individual_story["story_details"] = story["fields"]["details"]
 
-        filtered_stories = Story.objects.filter(**filter_conditions)    #enter filter conditions with kwargs
-        if len(filtered_stories) == 0:
-            return HttpResponse(status=404, content=f"No stories found for search criteria.", content_type='text/plain')
-        
-        serialised_filtered_stories = json.loads(serialize('json', filtered_stories)) #serialise function converts from object to string representation.
-                                                                                    #json.loads then converts from string to indexable dictionary
-        
-        story_array = []
-        
-        for story in serialised_filtered_stories: #grab the details from the serialised QuerySet and convert to correct data structure
-            individual_story = {}
-            print("Story is:", story)
-            individual_story["key"] = story["pk"]
-            individual_story["headline"] = story["fields"]["headline"]
-            individual_story["story_cat"] = story["fields"]["category"]
-            individual_story["story_region"] = story["fields"]["region"]
-            individual_story["author"] = story["fields"]["author"]
-            individual_story["story_date"] = story["fields"]["date"]
-            individual_story["story_details"] = story["fields"]["details"]
+        story_array.append(individual_story)
 
-            story_array.append(individual_story)
+    stories_json = {"stories": story_array} #place into finalised format
+    return HttpResponse(status = 200, content=json.dumps(stories_json), content_type="application/json")
 
-        stories_json = {"stories": story_array} #place into finalised format
-        return HttpResponse(status = 200, content=json.dumps(stories_json), content_type="application/json")
-    else:
-        return HttpResponse(status=404, content="No stories found for search criteria.", content_type='text/plain')
 
 @csrf_exempt
 def createStory(request):
@@ -179,13 +183,13 @@ def createStory(request):
 
 @csrf_exempt
 def deleteStory(request, key):
-    if request.session.get("username"):
-        if len(Story.objects.filter(id=key)) == 1:
+    if request.session.get("username"): #if theyre logged in
+        if len(Story.objects.filter(id=key)) == 1: #checking theres a corresponding ID
             try:
                 Story.objects.filter(id=key).delete()
                 return HttpResponse(status=200)  # Successful deletion, respond with 200 OK
             except Exception as e:
-                return HttpResponse(status=503, content=f"Story not found", content_type='text/plain')
+                return HttpResponse(status=503, content=f"Failed to delete story.", content_type='text/plain')
         else:
             return HttpResponse(status=503, content=f"Story not found", content_type='text/plain')
     return HttpResponse(status=401, content=f"You are not authenticated.", content_type='text/plain')

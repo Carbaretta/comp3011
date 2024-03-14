@@ -39,12 +39,11 @@ class Client:
         # DELETE command
         delete_parser = subparsers.add_parser("delete", help="Delete a news story")
         delete_parser.add_argument("story_key", help="Key of the news story to delete")
+
         while True:
             command_input = input("Enter command: ")
-
-            if not command_input:
-                break
             args = parser.parse_args(command_input.split())
+            
 
             if args.command == "login":
                 self.login(args)
@@ -65,6 +64,8 @@ class Client:
     def login(self, args):
         if args.url[-1] == "/": #check if the path is fully qualified on the url
             self.sessionData["login_url"] = args.url
+        else:
+            self.sessionData["login_url"] = args.url + "/"
 
         # Implement login logic here
         username = input("What is your username?: ")
@@ -111,7 +112,7 @@ class Client:
             details = input("What are the details of the story?: ")
             region = input("Which region is the story for?: ")
             story_payload = {"headline": headline, "category": category, "details":details, "region":region}
-            response = self.session.post(self.sessionData["url"] + 'api/stories' , json=story_payload, headers=headers_story)
+            response = self.session.post(self.sessionData["login_url"] + 'api/stories' , json=story_payload, headers=headers_story)
             if (response.status_code == 201):
                 print("Story successfully created")
             else:
@@ -136,7 +137,7 @@ class Client:
             story_json["story_date"] = args.date
 
         if not(self.sessionData["agencies"]):
-            self.list_services(True)
+            self.get_services()
 
         query_string = '&'.join([f'{key}={value}' for key, value in story_json.items()])
 
@@ -144,11 +145,15 @@ class Client:
             try:
                 response = self.session.get(agency["url"] + '/api/stories?' + query_string, headers=headers)
                 if response.status_code == 200:
+                    print("==========" + agency["agency_name"] + "=========")
                     self.display_news(response.text)
                 else:
-                    print("Query failed for ", agency["url"], " with code ", response.status_code)
+                    print(response.text)
+                    if agency["agency_code"] == "JES03":
+                        print("IDIOT BRO==============================================================================")
             except Exception as e:
                 print("Failed to get ", agency["url"])
+        
 
 
     def display_news(self, text):
@@ -163,10 +168,22 @@ class Client:
         else:
             print("error: ", response.content.decode('utf-8'))
 
+    def get_services(self):
+        try:
+            response = self.session.get("http://newssites.pythonanywhere.com/api/directory")
+            self.sessionData["agencies"] = json.loads(response.text)
+        except Exception as e:
+            return e
+
     def list_services(self, args):
-        response = self.session.get("http://newssites.pythonanywhere.com/api/directory")
-        self.sessionData["agencies"] = json.loads(response.text)
-        print(self.sessionData["agencies"])
+        try:
+            if not(self.sessionData["agencies"]):
+                self.get_services()
+            for agency in islice(self.sessionData["agencies"], 100):
+                print(agency["agency_code"]+ ": ", agency["agency_name"])
+        except Exception as e:
+            print("Fetch agencies failed with error: ", e)
+        
 
 
 
