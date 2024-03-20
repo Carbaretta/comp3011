@@ -98,23 +98,17 @@ def getStories(request):    #fetch all stories, filtered against user specified 
     print("Query params:", query_params)
     filter_conditions = {}  #build a filter list
     if query_params["story_cat"][0] != "*":
+        if (not query_params["story_cat"][0] in ("art", "pol", "tech", "trivia")):
+            return HttpResponse(status=404, content=f"Bad category given. Must be 'art', 'pol', 'tech' or 'trivia'", content_type='text/plain')
         filter_conditions["category"] = query_params["story_cat"][0]
     if query_params["story_region"][0] != "*":
+        if (not query_params["story_region"][0] in ("w","uk","eu")):
+            return HttpResponse(status=404, content=f"Bad region given. Must be 'w', 'uk', 'eu' ", content_type='text/plain')
         filter_conditions["region"] = query_params["story_region"][0]
     if query_params["story_date"][0] != "*":
         date_filter = datetime.datetime.strptime(query_params["story_date"], "%d/%m/%y") ##extract text format into actual datetime object 
         filter_conditions["date__gte"] = date_filter.strftime("%Y-%m-%d 00:00:00.000000") ##create filter. __gte append makes the filter such we filter dates "greater than or equal"
 
-    # print(request.GET.urlencode())
-    # decoded_data = parse_qs(request.GET.urlencode())
-
-    # if decoded_data.get("story_cat", [])[0] != "*":
-    #     filter_conditions["category"] = decoded_data.get("story_cat", [])[0]
-    # if decoded_data.get("story_region", [])[0] != "*":
-    #     filter_conditions["region"] = decoded_data.get("story_cat", [])[0]
-    # if decoded_data.get("story_data", [])[0] != "*":
-    #     date_filter = datetime.datetime.strptime(decoded_data.get("story_cat", [])[0], "%d/%m/%y") ##extract text format into actual datetime object 
-    #     filter_conditions["date__gte"] = date_filter.strftime("%Y-%m-%d 00:00:00.000000") ##create filter. __gte append makes the filter such we filter dates "greater than or equal"
 
     print("Conditions:", filter_conditions)
     filtered_stories = Story.objects.filter(**filter_conditions)    #enter filter conditions with kwargs

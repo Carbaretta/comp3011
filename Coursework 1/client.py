@@ -161,6 +161,8 @@ class Client:
                     if response.status_code == 200:
                         print("==========" + agency["agency_name"] + "=========")
                         self.display_news(response.text)
+                    else:
+                        print(response.status_code)
                         
                 except Exception as e:
                     print("Failed to get ", agency["url"])
