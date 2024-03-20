@@ -125,8 +125,6 @@ class Client:
     def news(self, args):
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         story_json = {"story_cat": "*","story_region":"*" ,"story_date":"*" }
-        if args.id: #implement later
-                    pass
         if args.cat:
             story_json["story_cat"] = args.cat
 
@@ -138,22 +136,34 @@ class Client:
 
         if not(self.sessionData["agencies"]):
             self.get_services()
-
+ 
         query_string = '&'.join([f'{key}={value}' for key, value in story_json.items()])
-
-        for agency in self.sessionData["agencies"]:
-            try:
-                response = self.session.get(agency["url"] + '/api/stories?' + query_string, headers=headers)
-                if response.status_code == 200:
-                    print("==========" + agency["agency_name"] + "=========")
-                    self.display_news(response.text)
+        print(query_string)
+        if args.id: #only do if specific agency
+            agencyFound = False
+            for agency in self.sessionData["agencies"]:
+                if agency["agency_code"] == args.id:
+                    agencyFound = True
+                    response = self.session.get(agency["url"] + '/api/stories?' + query_string, headers=headers)
+                    if response.status_code == 200:
+                        print("==========" + agency["agency_name"] + "=========")
+                        self.display_news(response.text)
+                    else:
+                        print("Failed to fetch news from ", agency["agency_name"])
                 else:
-                    print(response.text)
-                    if agency["agency_code"] == "JES03":
-                        print("IDIOT BRO==============================================================================")
-            except Exception as e:
-                print("Failed to get ", agency["url"])
-        
+                    pass
+            if not agencyFound:
+                print("Agency not found.")
+        else:
+            for agency in islice(self.sessionData["agencies"], 20):
+                try:
+                    response = self.session.get(agency["url"] + '/api/stories?' + query_string, headers=headers)
+                    if response.status_code == 200:
+                        print("==========" + agency["agency_name"] + "=========")
+                        self.display_news(response.text)
+                        
+                except Exception as e:
+                    print("Failed to get ", agency["url"])
 
 
     def display_news(self, text):
