@@ -111,9 +111,13 @@ def getStories(request):    #fetch all stories, filtered against user specified 
 
 
     print("Conditions:", filter_conditions)
-    filtered_stories = Story.objects.filter(**filter_conditions)    #enter filter conditions with kwargs
-    if len(filtered_stories) == 0:
+    try:
+        filtered_stories = Story.objects.filter(**filter_conditions)    #enter filter conditions with kwargs
+        if len(filtered_stories) == 0:
+            return HttpResponse(status=404, content=f"No stories found for search criteria.", content_type='text/plain')
+    except:
         return HttpResponse(status=404, content=f"No stories found for search criteria.", content_type='text/plain')
+    
     
     serialised_filtered_stories = json.loads(serialize('json', filtered_stories)) #serialise function converts from object to string representation.
                                                                                 #json.loads then converts from string to indexable dictionary
