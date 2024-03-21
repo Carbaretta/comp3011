@@ -97,7 +97,7 @@ def getStories(request):    #fetch all stories, filtered against user specified 
     query_params = parse_qs(request.META["QUERY_STRING"])
 
     if len(query_params) != 3:
-        print("=================Ruh Roh.=================")
+        return HttpResponse(status=404, content="Bad query parameters given", content_type="text/plain")
     print("Query params:", query_params)
     filter_conditions = {}  #build a filter list
     
