@@ -95,6 +95,9 @@ def manageStories(request): #handles all requests to /api/stories/
 @csrf_exempt
 def getStories(request):    #fetch all stories, filtered against user specified filters
     query_params = parse_qs(request.META["QUERY_STRING"])
+
+    if len(query_params) != 3:
+        print("=================Ruh Roh.=================")
     print("Query params:", query_params)
     filter_conditions = {}  #build a filter list
     
