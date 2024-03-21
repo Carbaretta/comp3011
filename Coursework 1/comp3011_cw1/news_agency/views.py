@@ -110,8 +110,11 @@ def getStories(request):    #fetch all stories, filtered against user specified 
             return HttpResponse(status=404, content=f"Bad region given. Must be 'w', 'uk', 'eu' ", content_type='text/plain')
         filter_conditions["region"] = query_params["story_region"][0]
     if query_params["story_date"][0] != "*":
-        date_filter = datetime.datetime.strptime(query_params["story_date"], "%d/%m/%y") ##extract text format into actual datetime object 
-        filter_conditions["date__gte"] = date_filter.strftime("%Y-%m-%d 00:00:00.000000") ##create filter. __gte append makes the filter such we filter dates "greater than or equal"
+        try:
+            date_filter = datetime.datetime.strptime(query_params["story_date"][0], "%d/%m/%Y") ##extract text format into actual datetime object 
+            filter_conditions["date__gte"] = date_filter ##create filter. __gte append makes the filter such we filter dates "greater than or equal"
+        except:
+            return HttpResponse(status=404, content=f"Invalid search criteria. Date must be in dd/mm/yyyy format.", content_type='text/plain')
 
 
     print("Conditions:", filter_conditions)
