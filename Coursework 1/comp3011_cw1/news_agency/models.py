@@ -19,7 +19,7 @@ class Story(models.Model):
     region = models.CharField(max_length=32, choices=REGION_OPTIONS)
 
     author = models.CharField(max_length=64)
-    date =  models.DateTimeField("story date")
+    date =  models.DateField("story date")
     details = models.CharField(max_length=128)
 
     def __str__(self): #added to make reading the database more human friendly

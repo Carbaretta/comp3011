@@ -97,6 +97,7 @@ def getStories(request):    #fetch all stories, filtered against user specified 
     query_params = parse_qs(request.META["QUERY_STRING"])
     print("Query params:", query_params)
     filter_conditions = {}  #build a filter list
+    
     if query_params["story_cat"][0] != "*":
         if (not query_params["story_cat"][0] in ("art", "pol", "tech", "trivia")):
             return HttpResponse(status=404, content=f"Bad category given. Must be 'art', 'pol', 'tech' or 'trivia'", content_type='text/plain')
@@ -116,7 +117,7 @@ def getStories(request):    #fetch all stories, filtered against user specified 
         if len(filtered_stories) == 0:
             return HttpResponse(status=404, content=f"No stories found for search criteria.", content_type='text/plain')
     except:
-        return HttpResponse(status=404, content=f"No stories found for search criteria.", content_type='text/plain')
+        return HttpResponse(status=404, content=f"Invalid search criteria.", content_type='text/plain')
     
     
     serialised_filtered_stories = json.loads(serialize('json', filtered_stories)) #serialise function converts from object to string representation.
