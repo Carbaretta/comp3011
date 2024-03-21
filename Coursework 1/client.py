@@ -2,6 +2,7 @@ import argparse
 import requests
 import json
 from itertools import islice
+from datetime import datetime
 
 class Client:
     def __init__(self):
@@ -26,6 +27,9 @@ class Client:
         # POST command
         subparsers.add_parser("post", help="Post a news story")
 
+        # EXIT command
+        subparsers.add_parser("exit", help="Exit program")
+
         # NEWS command
         news_parser = subparsers.add_parser("news", help="Request news stories from a web service")
         news_parser.add_argument("-id", help="ID of the news service")
@@ -41,24 +45,32 @@ class Client:
         delete_parser.add_argument("story_key", help="Key of the news story to delete")
 
         while True:
-            command_input = input("Enter command: ")
-            args = parser.parse_args(command_input.split())
+            command_input = input("Enter command (login, logout, post, news, list, delete, exit): ")
+            args =None
+            try:
+                args = parser.parse_args(command_input.split())
+            except:
+                continue
             
+            if(args):
+                if args.command == "login":
+                    self.login(args)
+                elif args.command == "logout":
+                    self.logout(args)
+                elif args.command == "post":
+                    self.post(args)
+                elif args.command == "news":
+                    self.news(args)
+                elif args.command == "list":
+                    self.list_services(args)
+                elif args.command == "delete":
+                    self.delete(args)
+                elif args.command == "exit":
+                    exit(0)
+                else:
+                    print("Unknown command")
 
-            if args.command == "login":
-                self.login(args)
-            elif args.command == "logout":
-                self.logout(args)
-            elif args.command == "post":
-                self.post(args)
-            elif args.command == "news":
-                self.news(args)
-            elif args.command == "list":
-                self.list_services(args)
-            elif args.command == "delete":
-                self.delete(args)
-            else:
-                print("Unknown command")
+            
 
 
     def login(self, args):
@@ -67,7 +79,9 @@ class Client:
         else:
             self.sessionData["login_url"] = args.url + "/"
 
-        # Implement login logic here
+        if (not "https://" in self.sessionData["login_url"]) and not ("http://" in self.sessionData["login_url"]):
+            self.sessionData["login_url"] = "http://" + self.sessionData["login_url"] #default to http://
+
         username = input("What is your username?: ")
         password = input("What is your password?: ")
 
@@ -93,7 +107,11 @@ class Client:
     def logout(self, args):
         # Implement logout logic here
         if self.sessionData["logged_in"]:
-            response = self.session.post(self.sessionData["login_url"] + 'api/logout')
+            try:
+                response = self.session.post(self.sessionData["login_url"] + 'api/logout')
+            except Exception as e:
+                print("Logout failed: ", e)
+
             if int(response.status_code) == 200:
                 self.sessionData["logged_in"] == False
             print(response.text)
@@ -108,9 +126,26 @@ class Client:
             print("Creating story")
             
             headline = input("What is the story headline?: ")
+            if len(headline) > 64 or len(headline) < 1:
+                print("Invalid headline given. Must be between 1 and 64 characters")
+                return
             category = input("What is the story category?: ")
+            category = category.replace(" ", '') #strip whitespace
+            if category not in ("pol", "art", "tech", "trivia"):
+                print("Invalid category given. Must be one of  'art', 'tech', 'pol', 'trivia'")
+                return
+            
             details = input("What are the details of the story?: ")
+            if len(details) > 128 or len(details) < 1:
+                print("Invalid details given. Must be between 1 and 128 characters")
+                return
+            
             region = input("Which region is the story for?: ")
+            region = region.replace(" ", '')
+            if region not in ("uk", "w", "eu"):
+                print("Invalid category given. Must be one of  'art', 'tech', 'pol', 'trivia'")
+                return
+            
             story_payload = {"headline": headline, "category": category, "details":details, "region":region}
             response = self.session.post(self.sessionData["login_url"] + 'api/stories' , json=story_payload, headers=headers_story)
             if (response.status_code == 201):
@@ -120,65 +155,113 @@ class Client:
         else:
             print("You are not logged in.")
         
-
+    def validDate(self, date):
+        try:
+            datetime.strptime(date, '%d/%m/%Y')
+            return True
+        except ValueError:
+            return False
 
     def news(self, args):
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         story_json = {"story_cat": "*","story_region":"*" ,"story_date":"*" }
         if args.cat:
-            story_json["story_cat"] = args.cat
+            story_json["story_cat"] = args.cat.replace('"', '')
+            if story_json["story_cat"] not in ("pol", "art", "tech", "trivia"):
+                print("Invalid category given. Must be one of  'art', 'tech', 'pol', 'trivia'")
+                return
 
         if args.reg:
-            story_json["story_region"] = args.reg
+            story_json["story_region"] = args.reg.replace('"', '')
+            if story_json["story_region"] not in ("uk", "w", "eu"):
+                print("Invalid region given. Must be one of  'uk', 'w', 'eu'")
+                return
 
         if args.date:
-            story_json["story_date"] = args.date
+            story_json["story_date"] = args.date.replace('"', '')
+            if not self.validDate(story_json["story_date"]):
+                print("Invalid date given. Must be in format dd/mm/yyyy")
+                return
+
+        if args.id:
+            args.id = args.id.replace('"', '')
 
         if not(self.sessionData["agencies"]):
             self.get_services()
  
         query_string = '&'.join([f'{key}={value}' for key, value in story_json.items()])
-        print(query_string)
+
+        storiesPrinted = 0
+
         if args.id: #only do if specific agency
             agencyFound = False
             for agency in self.sessionData["agencies"]:
                 if agency["agency_code"] == args.id:
                     agencyFound = True
-                    response = self.session.get(agency["url"] + '/api/stories?' + query_string, headers=headers)
-                    if response.status_code == 200:
-                        print("==========" + agency["agency_name"] + "=========")
-                        self.display_news(response.text)
-                    else:
-                        print("Failed to fetch news from ", agency["agency_name"])
+                    response = None
+                    try:
+                        response = self.session.get(agency["url"] + '/api/stories?' + query_string, headers=headers)
+                    except Exception as e:
+                        print("Failed to fetch news from agency.")
+
+                    if response:
+                        if response.status_code == 200:
+                            if response.text:
+                                print("==========" + agency["agency_name"] + "=========")
+                                self.display_news(response.text, storiesPrinted)
+                        else:
+                            print("Failed to fetch news from ", agency["agency_name"])
                 else:
                     pass
             if not agencyFound:
                 print("Agency not found.")
         else:
-            for agency in islice(self.sessionData["agencies"], 20):
-                try:
-                    response = self.session.get(agency["url"] + '/api/stories?' + query_string, headers=headers)
-                    if response.status_code == 200:
-                        print("==========" + agency["agency_name"] + "=========")
-                        self.display_news(response.text)
-                    else:
-                        print(response.status_code)
-                        
-                except Exception as e:
-                    print("Failed to get ", agency["url"])
+            for agency in self.sessionData["agencies"]:
+                if storiesPrinted < 20:
+                    try:
+                        response = self.session.get(agency["url"] + '/api/stories?' + query_string, headers=headers)
+                        if response.status_code == 200:
+                            if len(response.text) > 0:
+                                print("==========" + agency["agency_name"] + "=========")
+                                storiesPrinted = self.display_news(response.text, storiesPrinted)
+                            else:
+                                print("Failed to fetch news from ", agency["agency_name"])
+                            
+                    except Exception as e:
+                        print("Failed to get ", agency["url"])
+                else:
+                    break
 
 
-    def display_news(self, text):
+    def display_news(self, text, storiesPrinted):
+
         stories = json.loads(text)
-        for story in stories["stories"]:
-            print(str(story["key"]) + ": " + story["headline"])
+        try:
+            for story in stories["stories"]:
+                if storiesPrinted < 20:
+                    print("-----------------------------------------------")
+                    print(story["headline"])
+                    print("Published on " + str(story["story_date"]) + " | " + story["story_region"] + " | " + story["story_cat"] + " | Written by " + story["author"] + " | Story ID: " + str(story["key"]))
+                    print(story["story_details"])
+                    print("-----------------------------------------------")
+                    storiesPrinted += 1
+                else:
+                    return storiesPrinted #limited exceeded, return
+            
+            return storiesPrinted #limit not yet exceeded
+        except Exception as e:
+            print("Failed to decode JSON", e)
+            return storiesPrinted
 
     def delete(self, args):
-        response = self.session.delete(self.sessionData["url"] + 'api/stories' + args.story_key)
-        if response.status_code == 200:
-            print("Story deleted successfully")
+        if self.sessionData["logged_in"]:
+            response = self.session.delete(self.sessionData["login_url"] + 'api/stories/' + args.story_key)
+            if response.status_code == 200:
+                print("Story deleted successfully")
+            else:
+                print("error: ", response.content.decode('utf-8'))
         else:
-            print("error: ", response.content.decode('utf-8'))
+            print("You are not logged in.")
 
     def get_services(self):
         try:

@@ -197,4 +197,4 @@ def deleteStory(request, key):
                 return HttpResponse(status=503, content=f"Failed to delete story.", content_type='text/plain')
         else:
             return HttpResponse(status=503, content=f"Story not found", content_type='text/plain')
-    return HttpResponse(status=401, content=f"You are not authenticated.", content_type='text/plain')
+    return HttpResponse(status=503, content=f"You are not authenticated.", content_type='text/plain')

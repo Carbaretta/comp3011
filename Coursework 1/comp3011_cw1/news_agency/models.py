@@ -30,7 +30,6 @@ class Author(models.Model):
     name = models.CharField(max_length=64)
     username = models.CharField(max_length=128, unique=True)
     password = models.CharField(max_length=128)
-
     def __str__(self): #added to make reading the database more human friendly
         return self.username #this outputs headline to djhango terminal when doing Story.objects.all()
 
